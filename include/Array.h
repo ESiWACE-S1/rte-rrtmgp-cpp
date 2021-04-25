@@ -500,10 +500,31 @@ class Array_gpu
             // Create the array and fill it with the subset.
             Array_gpu<T, N> a_sub(subdims);
 
-            return subset_copy(a_sub, block_corners);
+            subset_copy(a_sub, block_corners);
+
+            return a_sub;
         }
 
-        inline Array_gpu<T, N> subset_copy(Array_gpu<T, N>& a_sub,
+        inline void subset(
+                Array_gpu<T, N>& a_sub,
+                const std::array<std::pair<int, int>, N> ranges) const
+        {
+            // Calculate the dimension sizes based on the range.
+            std::array<int, N> subdims;
+            std::array<int, N> block_corners;
+
+            for (int i=0; i<N; ++i)
+            {
+                subdims[i] = ranges[i].second - ranges[i].first + 1;
+                // CvH how flexible / tolerant are we?
+                block_corners[i] = ranges[i].first;
+            }
+
+            subset_copy(a_sub, block_corners);
+        }
+
+        inline void subset_copy(
+                Array_gpu<T, N>& a_sub,
                 const std::array<int, N>& block_corners) const
         {
             Subset_data<N> subset_data;
@@ -524,8 +545,6 @@ class Array_gpu
             dim3 grid_gpu(grid_ncells);
 
             subset_kernel<<<grid_gpu, block_gpu>>>(a_sub.data_ptr, data_ptr, subset_data, a_sub.ncells);
-
-            return a_sub;
         }
         #endif
 
