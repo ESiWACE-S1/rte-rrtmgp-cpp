@@ -137,27 +137,48 @@ void Planck_source_kernel(
         TF* __restrict__ lev_src_inc, TF* __restrict__ lev_src_dec,
         TF* __restrict__ sfc_src_jac, TF* __restrict__ pfrac)
 {
-    const int ibnd = blockIdx.x*blockDim.x + threadIdx.x;
+    const int igpt = blockIdx.x*blockDim.x + threadIdx.x;
     const int ilay = blockIdx.y*blockDim.y + threadIdx.y;
     const int icol = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if ( (icol < ncol) && (ilay < nlay) && (ibnd < nband))
+    if ( (icol < ncol) && (ilay < nlay) && (igpt < ngpt) )
     {
+
+        //retrieve the band (naive implementation)//
+        int ibnd = -1;
+        int lbnd =  0;
+        while(ibnd == -1)
+	{
+	  if( (igpt >= (band_lims_gpt[2 * ibnd] - 1)) && (igpt < band_lims_gpt[2 * ibnd + 1]) )
+	  {
+	    ibnd = lbnd;
+	  }
+	  lbnd = lbnd +1;
+	  //if(lbnd > nband) return;
+	}
+
         const int idx_collay = icol + ilay * ncol;
         const int itropo = !tropo[idx_collay];
         const int gpt_start = band_lims_gpt[2 * ibnd] - 1;
-        const int gpt_end = band_lims_gpt[2 * ibnd + 1];
+	//        const int gpt_end = band_lims_gpt[2 * ibnd + 1];
         const int iflav = gpoint_flavor[itropo + 2 * gpt_start] - 1;
         const int idx_fcl3 = 2 * 2 * 2* (iflav + icol * nflav + ilay * ncol * nflav);
         const int idx_fcl1 = 2 * (iflav + icol * nflav + ilay * ncol * nflav);
-        const int idx_tau = gpt_start + ilay * ngpt + icol * nlay * ngpt;
+        //const int idx_tau = gpt_start + ilay * ngpt + icol * nlay * ngpt;
+	const int idx_in = igpt + ilay * ngpt + icol * nlay * ngpt;
 
         //major gases//
-        interpolate3D_byflav_kernel(ones, &fmajor[idx_fcl3],
-                                    &pfracin[gpt_start], gpt_start, gpt_end,
+        // interpolate3D_byflav_kernel(ones, &fmajor[idx_fcl3],
+        //                             &pfracin[gpt_start], gpt_start, gpt_end,
+        //                             &jeta[idx_fcl1], jtemp[idx_collay],
+        //                             jpress[idx_collay]+itropo, ngpt, neta, npres+1,
+        //                             &pfrac[idx_tau]);
+
+	interpolate3D_byflav_kernel(ones, &fmajor[idx_fcl3],
+                                    &pfracin[igpt], igpt, igpt+1,
                                     &jeta[idx_fcl1], jtemp[idx_collay],
                                     jpress[idx_collay]+itropo, ngpt, neta, npres+1,
-                                    &pfrac[idx_tau]);
+                                    &pfrac[idx_in]);
 
         // compute surface source irradiances
         if (ilay == sfc_lay - 1) // Subtract one to correct for fortran indexing.
@@ -165,35 +186,29 @@ void Planck_source_kernel(
             const TF planck_function_sfc1 = interpolate1D(tsfc[icol],               temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
             const TF planck_function_sfc2 = interpolate1D(tsfc[icol] + delta_Tsurf, temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
 
-            for (int igpt=gpt_start; igpt<gpt_end; ++igpt)
-            {
-                const int idx_in  = igpt + ilay*ngpt + icol*nlay*ngpt;
-                const int idx_out = igpt + icol*ngpt;
-                sfc_src[idx_out] = pfrac[idx_in] * planck_function_sfc1;
-                sfc_src_jac[idx_out] = pfrac[idx_in] * (planck_function_sfc2 - planck_function_sfc1);
-            }
+	    const int idx_in  = igpt + ilay*ngpt + icol*nlay*ngpt;
+	    const int idx_out = igpt + icol*ngpt;
+	    sfc_src[idx_out] = pfrac[idx_in] * planck_function_sfc1;
+	    sfc_src_jac[idx_out] = pfrac[idx_in] * (planck_function_sfc2 - planck_function_sfc1);
         }
 
         // compute layer source irradiances.
         const int idx_tmp = icol + ilay*ncol;
         const TF planck_function_lay = interpolate1D(tlay[idx_tmp], temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
-        for (int igpt=gpt_start; igpt<gpt_end; ++igpt)
-        {
-            const int idx_inout  = igpt + ilay*ngpt + icol*nlay*ngpt;
-            lay_src[idx_inout] = pfrac[idx_inout] * planck_function_lay;
-        }
+
+	const int idx_inout  = igpt + ilay*ngpt + icol*nlay*ngpt;
+	lay_src[idx_inout] = pfrac[idx_inout] * planck_function_lay;
+
 
         // compute level source irradiances.
         const int idx_tmp1 = icol + (ilay+1)*ncol;
         const int idx_tmp2 = icol + ilay*ncol;
         const TF planck_function_lev1 = interpolate1D(tlev[idx_tmp1], temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
         const TF planck_function_lev2 = interpolate1D(tlev[idx_tmp2], temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
-        for (int igpt=gpt_start; igpt<gpt_end; ++igpt)
-        {
-            const int idx_inout  = igpt + ilay*ngpt + icol*nlay*ngpt;
-            lev_src_inc[idx_inout] = pfrac[idx_inout] * planck_function_lev1;
-            lev_src_dec[idx_inout] = pfrac[idx_inout] * planck_function_lev2;
-        }
+
+	const int idx_inout  = igpt + ilay*ngpt + icol*nlay*ngpt;
+	lev_src_inc[idx_inout] = pfrac[idx_inout] * planck_function_lev1;
+	lev_src_dec[idx_inout] = pfrac[idx_inout] * planck_function_lev2;
     }
 }
 
