@@ -149,7 +149,7 @@ void Planck_source_kernel(
         int lbnd =  0;
         while(ibnd == -1)
 	{
-	  if( (igpt >= (band_lims_gpt[2 * ibnd] - 1)) && (igpt < band_lims_gpt[2 * ibnd + 1]) )
+	  if( (igpt >= (band_lims_gpt[2 * lbnd] - 1)) && (igpt < band_lims_gpt[2 * lbnd + 1]) )
 	  {
 	    ibnd = lbnd;
 	  }
@@ -206,7 +206,6 @@ void Planck_source_kernel(
         const TF planck_function_lev1 = interpolate1D(tlev[idx_tmp1], temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
         const TF planck_function_lev2 = interpolate1D(tlev[idx_tmp2], temp_ref_min, totplnk_delta, nPlanckTemp, &totplnk[ibnd * nPlanckTemp]);
 
-	const int idx_inout  = igpt + ilay*ngpt + icol*nlay*ngpt;
 	lev_src_inc[idx_inout] = pfrac[idx_inout] * planck_function_lev1;
 	lev_src_dec[idx_inout] = pfrac[idx_inout] * planck_function_lev2;
     }
